@@ -26,10 +26,10 @@ from ticket_router import TicketRouterEnv
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-IMAGE_NAME = os.getenv("IMAGE_NAME")
-API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
-API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
-MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
+API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
+MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
+HF_TOKEN = os.getenv("HF_TOKEN")
+LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
 TASK_NAME = os.getenv("TICKET_ROUTER_TASK", "basic_routing")
 BENCHMARK = "ticket_router"
 MAX_STEPS = 5
@@ -131,10 +131,10 @@ def call_llm(client: OpenAI, task: str, subject: str, body: str) -> dict:
 # Main loop
 # ---------------------------------------------------------------------------
 async def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
 
-    if IMAGE_NAME:
-        env = await TicketRouterEnv.from_docker_image(IMAGE_NAME)
+    if LOCAL_IMAGE_NAME:
+        env = await TicketRouterEnv.from_docker_image(LOCAL_IMAGE_NAME)
     else:
         base = os.getenv("TICKET_ROUTER_URL", "http://localhost:7860")
         env = TicketRouterEnv(base_url=base)
