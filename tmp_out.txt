@@ -1,0 +1,4 @@
+[START] task=basic_routing env=ticket_router model=Qwen/Qwen2.5-72B-Instruct
+[DEBUG] LLM error: Connection error.
+[STEP] step=1 action={"department": "Tech Support"} reward=0.00 done=true error=null
+[END] success=false steps=1 score=0.00 rewards=0.00

@@ -1,0 +1,28 @@
+FROM python:3.11-slim
+
+WORKDIR /app/env
+
+# Install system deps
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy project files
+COPY . .
+
+# Install Python deps
+RUN pip install --no-cache-dir \
+    "openenv-core[core]>=0.2.2" \
+    "fastapi>=0.115.0" \
+    "pydantic>=2.0.0" \
+    "uvicorn>=0.24.0" \
+    "fastmcp>=0.1.0"
+
+ENV PYTHONPATH="/app/env:$PYTHONPATH"
+
+EXPOSE 7860
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:7860/health')" || exit 1
+
+CMD ["uvicorn", "server.app:app", "--host", "0.0.0.0", "--port", "7860"]
