@@ -241,7 +241,7 @@ class TicketRouterEnvironment(MCPEnvironment):
             }
         )
 
-        self.current_task = os.environ.get("TICKET_ROUTER_TASK", "easy")
+        self.current_difficulty = os.environ.get("TICKET_ROUTER_TASK", "easy")
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self._current_ticket = None
         self._last_reward = 0.0
@@ -271,7 +271,7 @@ class TicketRouterEnvironment(MCPEnvironment):
             },
         )
 
-        rubric = self.rubric.get(self.current_task, self.rubric["easy"])
+        rubric = self.rubric.get(self.current_difficulty, self.rubric["easy"])
         reward = rubric(None, temp_obs)
 
         self._last_reward = round(reward, 2)
@@ -324,19 +324,16 @@ class TicketRouterEnvironment(MCPEnvironment):
     # ------------------------------------------------------------------
     def reset(
         self,
-        task_id: str = "easy",
+        difficulty: str = "easy",
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Observation:
-        # Prioritize explicit task_id from parameter (evaluator protocol)
-        # Fallback to kwargs or environment variable
-        task = task_id or kwargs.get("task") or os.environ.get("TICKET_ROUTER_TASK")
-        if task in TASK_TICKETS:
-            self.current_task = task
+        # User-prescribed protocol: use 'difficulty' as the reset parameter
+        self.current_difficulty = difficulty or kwargs.get("difficulty") or "easy"
 
         rng = random.Random(seed)
-        pool = TASK_TICKETS.get(self.current_task, EASY_TICKETS)
+        pool = TASK_TICKETS.get(self.current_difficulty, EASY_TICKETS)
         self._current_ticket = rng.choice(pool)
 
         self._state = State(
@@ -365,10 +362,10 @@ class TicketRouterEnvironment(MCPEnvironment):
         return TicketObservation(
             done=False,
             reward=0.0,
-            task=self.current_task,
+            task=self.current_difficulty,
             email_subject=self._current_ticket["subject"],
             email_body=self._current_ticket["body"],
-            instructions=instructions.get(self.current_task, ""),
+            instructions=instructions.get(self.current_difficulty, ""),
         )
 
     def _step_impl(

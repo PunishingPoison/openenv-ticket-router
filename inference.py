@@ -130,27 +130,21 @@ def call_llm(client: OpenAI, task: str, subject: str, body: str) -> dict:
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
-async def main() -> None:
-    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-
-    if LOCAL_IMAGE_NAME:
-        env = await TicketRouterEnv.from_docker_image(LOCAL_IMAGE_NAME)
-    else:
-        base = os.getenv("TICKET_ROUTER_URL", "http://localhost:7860")
-        env = TicketRouterEnv(base_url=base)
-        await env.__aenter__()
-
+async def run_episode(client: OpenAI, env: TicketRouterEnv, difficulty: str) -> float:
+    """Run a single episode for a given difficulty."""
+    task_id = f"triage_{difficulty}_001"
+    log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
+    
     rewards: List[float] = []
     steps_taken = 0
     score = 0.0
     success = False
 
-    log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
-
     try:
-        result = await env.reset(task_id=TASK_NAME)
+        # User-prescribed protocol: pass 'difficulty' to reset()
+        result = await env.reset(difficulty=difficulty)
 
-        # Extract observation data — handle both dict and object forms
+        # Extract observation data
         if hasattr(result, "metadata"):
             obs = result.metadata
         elif isinstance(result, dict):
@@ -158,12 +152,12 @@ async def main() -> None:
         else:
             obs = {}
 
-        task = obs.get("task", TASK_NAME)
+        task_label = obs.get("task", difficulty)
         subject = obs.get("email_subject", "")
         body = obs.get("email_body", "")
 
         # Ask the LLM to triage
-        answer = call_llm(client, task, subject, body)
+        answer = call_llm(client, task_label, subject, body)
 
         # Build tool arguments
         dept = answer.get("department", "")
@@ -196,7 +190,7 @@ async def main() -> None:
         log_step(step=1, action=action_str, reward=reward,
                  done=done, error=error)
 
-        score = reward  # single-step episode, score = reward
+        score = reward
         success = score >= 0.5
 
     except Exception as exc:
@@ -206,17 +200,34 @@ async def main() -> None:
         steps_taken += 1
 
     finally:
-        try:
-            await env.close()
-        except Exception:
-            pass
-        
         # Enforce hackathon rule strictly
         score = max(0.01, min(score, 0.99))
         rewards = [max(0.01, min(r, 0.99)) for r in rewards]
 
         log_end(success=success, steps=steps_taken, score=score,
                 rewards=rewards)
+        return score
+
+
+async def main() -> None:
+    client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
+
+    if LOCAL_IMAGE_NAME:
+        env = await TicketRouterEnv.from_docker_image(LOCAL_IMAGE_NAME)
+    else:
+        base = os.getenv("TICKET_ROUTER_URL", "http://localhost:7860")
+        env = TicketRouterEnv(base_url=base)
+        await env.__aenter__()
+
+    try:
+        difficulties = ["easy", "medium", "hard"]
+        for diff in difficulties:
+            await run_episode(client, env, diff)
+    finally:
+        try:
+            await env.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
