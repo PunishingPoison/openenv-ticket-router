@@ -4,16 +4,27 @@ type: space
 runtime: fastapi
 app: server.app:app
 port: 7860
+rubrics:
+  - name: basic_routing
+    class: server.rubrics.BasicRoutingRubric
+  - name: extraction_routing
+    class: server.rubrics.ExtractionRoutingRubric
+  - name: pii_redaction
+    class: server.rubrics.PIIRedactionRubric
+
 tasks:
   - name: basic_routing
     description: "Route support emails to the correct department (Sales, Billing, Tech Support)."
+    grader: basic_routing
     env:
       TICKET_ROUTER_TASK: basic_routing
   - name: extraction_routing
     description: "Route emails and extract the technical error code (e.g., ERR-404)."
+    grader: extraction_routing
     env:
       TICKET_ROUTER_TASK: extraction_routing
   - name: pii_redaction
     description: "Route emails and redact all Personally Identifiable Information (CC, SSN, DOB)."
+    grader: pii_redaction
     env:
       TICKET_ROUTER_TASK: pii_redaction

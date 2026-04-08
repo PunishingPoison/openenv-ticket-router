@@ -1,6 +1,0 @@
-name: pii_redaction
-description: "Route this email to the correct department AND rewrite the email body replacing all PII with [REDACTED]."
-task_id: pii_redaction
-difficulty: hard
-grader:
-  type: openenv.core.rubrics.PIIRedactionRubric
