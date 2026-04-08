@@ -30,7 +30,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-TASK_NAME = os.getenv("TICKET_ROUTER_TASK", "triage_easy")
+TASK_NAME = os.getenv("TASK_NAME", "easy")
 BENCHMARK = "ticket_router"
 MAX_STEPS = 5
 TEMPERATURE = 0.2
@@ -148,7 +148,7 @@ async def main() -> None:
     log_start(task=TASK_NAME, env=BENCHMARK, model=MODEL_NAME)
 
     try:
-        result = await env.reset(task=TASK_NAME)
+        result = await env.reset(task_id=TASK_NAME)
 
         # Extract observation data — handle both dict and object forms
         if hasattr(result, "metadata"):

@@ -5,29 +5,29 @@ runtime: fastapi
 app: server.app:app
 port: 7860
 rubrics:
-  - name: triage_easy
+  - name: easy
     class: server.rubrics.BasicRoutingRubric
-  - name: triage_medium
+  - name: medium
     class: server.rubrics.ExtractionRoutingRubric
-  - name: triage_hard
+  - name: hard
     class: server.rubrics.PIIRedactionRubric
 
 tasks:
-  - id: triage_easy
-    name: triage_easy
+  - id: easy
+    name: easy
     description: "Basic department routing."
-    grader: triage_easy
+    grader: easy
     env:
-      TICKET_ROUTER_TASK: triage_easy
-  - id: triage_medium
-    name: triage_medium
+      TICKET_ROUTER_TASK: easy
+  - id: medium
+    name: medium
     description: "Department routing and error code extraction."
-    grader: triage_medium
+    grader: medium
     env:
-      TICKET_ROUTER_TASK: triage_medium
-  - id: triage_hard
-    name: triage_hard
+      TICKET_ROUTER_TASK: medium
+  - id: hard
+    name: hard
     description: "PII redaction and routing."
-    grader: triage_hard
+    grader: hard
     env:
-      TICKET_ROUTER_TASK: triage_hard
+      TICKET_ROUTER_TASK: hard

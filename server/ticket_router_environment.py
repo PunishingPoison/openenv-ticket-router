@@ -181,9 +181,9 @@ HARD_TICKETS = [
 
 # Map task names to their ticket pools
 TASK_TICKETS = {
-    "triage_easy": EASY_TICKETS,
-    "triage_medium": MEDIUM_TICKETS,
-    "triage_hard": HARD_TICKETS,
+    "easy": EASY_TICKETS,
+    "medium": MEDIUM_TICKETS,
+    "hard": HARD_TICKETS,
 }
 
 VALID_DEPARTMENTS = {"Sales", "Billing", "Tech Support"}
@@ -235,13 +235,13 @@ class TicketRouterEnvironment(MCPEnvironment):
 
         self.rubric = RubricDict(
             {
-                "triage_easy": BasicRoutingRubric(),
-                "triage_medium": ExtractionRoutingRubric(),
-                "triage_hard": PIIRedactionRubric(),
+                "easy": BasicRoutingRubric(),
+                "medium": ExtractionRoutingRubric(),
+                "hard": PIIRedactionRubric(),
             }
         )
 
-        self._task = os.environ.get("TICKET_ROUTER_TASK", "triage_easy")
+        self.current_task = os.environ.get("TICKET_ROUTER_TASK", "easy")
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self._current_ticket = None
         self._last_reward = 0.0
@@ -271,7 +271,7 @@ class TicketRouterEnvironment(MCPEnvironment):
             },
         )
 
-        rubric = self.rubric.get(self._task, self.rubric["triage_easy"])
+        rubric = self.rubric.get(self.current_task, self.rubric["easy"])
         reward = rubric(None, temp_obs)
 
         self._last_reward = round(reward, 2)
@@ -324,16 +324,19 @@ class TicketRouterEnvironment(MCPEnvironment):
     # ------------------------------------------------------------------
     def reset(
         self,
+        task_id: str = "easy",
         seed: Optional[int] = None,
         episode_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Observation:
-        task = kwargs.get("task", self._task)
+        # Prioritize explicit task_id from parameter (evaluator protocol)
+        # Fallback to kwargs or environment variable
+        task = task_id or kwargs.get("task") or os.environ.get("TICKET_ROUTER_TASK")
         if task in TASK_TICKETS:
-            self._task = task
+            self.current_task = task
 
         rng = random.Random(seed)
-        pool = TASK_TICKETS.get(self._task, EASY_TICKETS)
+        pool = TASK_TICKETS.get(self.current_task, EASY_TICKETS)
         self._current_ticket = rng.choice(pool)
 
         self._state = State(
@@ -344,15 +347,15 @@ class TicketRouterEnvironment(MCPEnvironment):
         self._done = False
 
         instructions = {
-            "triage_easy": (
+            "easy": (
                 "Route this email to the correct department. "
                 "Choose one of: Sales, Billing, Tech Support."
             ),
-            "triage_medium": (
+            "medium": (
                 "Route this email to the correct department AND extract "
                 "the error code (e.g. ERR-404). Both fields are required."
             ),
-            "triage_hard": (
+            "hard": (
                 "Route this email to the correct department AND rewrite "
                 "the email body replacing all PII (credit card numbers, "
                 "SSNs, dates of birth, phone numbers) with [REDACTED]."
@@ -362,10 +365,10 @@ class TicketRouterEnvironment(MCPEnvironment):
         return TicketObservation(
             done=False,
             reward=0.0,
-            task=self._task,
+            task=self.current_task,
             email_subject=self._current_ticket["subject"],
             email_body=self._current_ticket["body"],
-            instructions=instructions.get(self._task, ""),
+            instructions=instructions.get(self.current_task, ""),
         )
 
     def _step_impl(
