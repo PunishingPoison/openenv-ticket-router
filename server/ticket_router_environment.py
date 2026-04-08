@@ -248,6 +248,8 @@ class TicketRouterEnvironment(MCPEnvironment):
         elif task == "pii_redaction":
             reward = self._grade_hard(department, redacted_body, ticket)
 
+        # Hackathon rule: "Each task's score must be strictly between 0 and 1"
+        reward = max(0.01, min(reward, 0.99))
         self._last_reward = round(reward, 2)
         self._done = True
         return f"Graded. reward={self._last_reward:.2f}"

@@ -210,6 +210,11 @@ async def main() -> None:
             await env.close()
         except Exception:
             pass
+        
+        # Enforce hackathon rule strictly
+        score = max(0.01, min(score, 0.99))
+        rewards = [max(0.01, min(r, 0.99)) for r in rewards]
+
         log_end(success=success, steps=steps_taken, score=score,
                 rewards=rewards)
 
