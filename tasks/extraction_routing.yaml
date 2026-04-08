@@ -1,0 +1,6 @@
+name: extraction_routing
+description: "Route this email to the correct department AND extract the error code (e.g. ERR-404)."
+task_id: extraction_routing
+difficulty: medium
+grader:
+  type: openenv.core.rubrics.ExtractionRoutingRubric

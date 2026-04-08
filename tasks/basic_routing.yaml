@@ -1,0 +1,6 @@
+name: basic_routing
+description: "Route this email to the correct department. Choose one of: Sales, Billing, Tech Support."
+task_id: basic_routing
+difficulty: easy
+grader:
+  type: openenv.core.rubrics.BasicRoutingRubric

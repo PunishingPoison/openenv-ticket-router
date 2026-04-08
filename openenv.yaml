@@ -5,12 +5,15 @@ runtime: fastapi
 app: server.app:app
 port: 7860
 tasks:
-  basic_routing:
+  - name: basic_routing
+    description: "Route support emails to the correct department (Sales, Billing, Tech Support)."
     env:
       TICKET_ROUTER_TASK: basic_routing
-  extraction_routing:
+  - name: extraction_routing
+    description: "Route emails and extract the technical error code (e.g., ERR-404)."
     env:
       TICKET_ROUTER_TASK: extraction_routing
-  pii_redaction:
+  - name: pii_redaction
+    description: "Route emails and redact all Personally Identifiable Information (CC, SSN, DOB)."
     env:
       TICKET_ROUTER_TASK: pii_redaction
