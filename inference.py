@@ -21,7 +21,7 @@ from typing import List, Optional
 
 from openai import OpenAI
 
-from ticket_router import TicketRouterEnv
+from client import TicketRouterEnv
 
 # ---------------------------------------------------------------------------
 # Configuration
