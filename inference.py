@@ -30,7 +30,7 @@ API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-TASK_NAME = os.getenv("TICKET_ROUTER_TASK", "basic_routing")
+TASK_NAME = os.getenv("TICKET_ROUTER_TASK", "triage_easy")
 BENCHMARK = "ticket_router"
 MAX_STEPS = 5
 TEMPERATURE = 0.2
@@ -72,13 +72,13 @@ You are an L1 customer support triage system. You will receive a support
 email and a task type. You must respond with ONLY a valid JSON object
 (no markdown, no explanation) matching the task:
 
-For task "basic_routing":
+For task "triage_easy":
   {"department": "<Sales|Billing|Tech Support>"}
 
-For task "extraction_routing":
+For task "triage_medium":
   {"department": "Tech Support", "error_code": "<e.g. ERR-404>"}
 
-For task "pii_redaction":
+For task "triage_hard":
   {"department": "Billing", "redacted_body": "<full email body with all
   PII such as credit card numbers, SSNs, phone numbers, dates of birth
   replaced by [REDACTED]>"}

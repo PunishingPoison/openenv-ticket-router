@@ -181,9 +181,9 @@ HARD_TICKETS = [
 
 # Map task names to their ticket pools
 TASK_TICKETS = {
-    "basic_routing": EASY_TICKETS,
-    "extraction_routing": MEDIUM_TICKETS,
-    "pii_redaction": HARD_TICKETS,
+    "triage_easy": EASY_TICKETS,
+    "triage_medium": MEDIUM_TICKETS,
+    "triage_hard": HARD_TICKETS,
 }
 
 VALID_DEPARTMENTS = {"Sales", "Billing", "Tech Support"}
@@ -235,13 +235,13 @@ class TicketRouterEnvironment(MCPEnvironment):
 
         self.rubric = RubricDict(
             {
-                "basic_routing": BasicRoutingRubric(),
-                "extraction_routing": ExtractionRoutingRubric(),
-                "pii_redaction": PIIRedactionRubric(),
+                "triage_easy": BasicRoutingRubric(),
+                "triage_medium": ExtractionRoutingRubric(),
+                "triage_hard": PIIRedactionRubric(),
             }
         )
 
-        self._task = os.environ.get("TICKET_ROUTER_TASK", "basic_routing")
+        self._task = os.environ.get("TICKET_ROUTER_TASK", "triage_easy")
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self._current_ticket = None
         self._last_reward = 0.0
@@ -271,7 +271,7 @@ class TicketRouterEnvironment(MCPEnvironment):
             },
         )
 
-        rubric = self.rubric.get(self._task, self.rubric["basic_routing"])
+        rubric = self.rubric.get(self._task, self.rubric["triage_easy"])
         reward = rubric(None, temp_obs)
 
         self._last_reward = round(reward, 2)
@@ -344,15 +344,15 @@ class TicketRouterEnvironment(MCPEnvironment):
         self._done = False
 
         instructions = {
-            "basic_routing": (
+            "triage_easy": (
                 "Route this email to the correct department. "
                 "Choose one of: Sales, Billing, Tech Support."
             ),
-            "extraction_routing": (
+            "triage_medium": (
                 "Route this email to the correct department AND extract "
                 "the error code (e.g. ERR-404). Both fields are required."
             ),
-            "pii_redaction": (
+            "triage_hard": (
                 "Route this email to the correct department AND rewrite "
                 "the email body replacing all PII (credit card numbers, "
                 "SSNs, dates of birth, phone numbers) with [REDACTED]."

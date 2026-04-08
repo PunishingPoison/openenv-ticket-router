@@ -5,26 +5,29 @@ runtime: fastapi
 app: server.app:app
 port: 7860
 rubrics:
-  - name: basic_routing
+  - name: triage_easy
     class: server.rubrics.BasicRoutingRubric
-  - name: extraction_routing
+  - name: triage_medium
     class: server.rubrics.ExtractionRoutingRubric
-  - name: pii_redaction
+  - name: triage_hard
     class: server.rubrics.PIIRedactionRubric
 
 tasks:
-  - name: basic_routing
-    description: "Route support emails to the correct department (Sales, Billing, Tech Support)."
-    grader: basic_routing
+  - id: triage_easy
+    name: triage_easy
+    description: "Basic department routing."
+    grader: triage_easy
     env:
-      TICKET_ROUTER_TASK: basic_routing
-  - name: extraction_routing
-    description: "Route emails and extract the technical error code (e.g., ERR-404)."
-    grader: extraction_routing
+      TICKET_ROUTER_TASK: triage_easy
+  - id: triage_medium
+    name: triage_medium
+    description: "Department routing and error code extraction."
+    grader: triage_medium
     env:
-      TICKET_ROUTER_TASK: extraction_routing
-  - name: pii_redaction
-    description: "Route emails and redact all Personally Identifiable Information (CC, SSN, DOB)."
-    grader: pii_redaction
+      TICKET_ROUTER_TASK: triage_medium
+  - id: triage_hard
+    name: triage_hard
+    description: "PII redaction and routing."
+    grader: triage_hard
     env:
-      TICKET_ROUTER_TASK: pii_redaction
+      TICKET_ROUTER_TASK: triage_hard
