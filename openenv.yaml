@@ -5,6 +5,12 @@ runtime: fastapi
 app: server.app:app
 port: 7860
 tasks:
-  - basic_routing
-  - extraction_routing
-  - pii_redaction
+  basic_routing:
+    env:
+      TICKET_ROUTER_TASK: basic_routing
+  extraction_routing:
+    env:
+      TICKET_ROUTER_TASK: extraction_routing
+  pii_redaction:
+    env:
+      TICKET_ROUTER_TASK: pii_redaction

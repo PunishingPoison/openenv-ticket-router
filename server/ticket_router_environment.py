@@ -20,6 +20,7 @@ from uuid import uuid4
 from pydantic import Field
 from openenv.core.env_server.mcp_environment import MCPEnvironment
 from openenv.core.env_server.types import Action, Observation, State
+from openenv.core.rubrics import Rubric, RubricDict
 from fastmcp import FastMCP
 
 
@@ -182,6 +183,84 @@ TASK_TICKETS = {
 VALID_DEPARTMENTS = {"Sales", "Billing", "Tech Support"}
 
 
+# ---------------------------------------------------------------------------
+# Rubrics (Graders)
+# ---------------------------------------------------------------------------
+
+class TicketRubric(Rubric):
+    """Base class for ticket rubrics with standard clamping."""
+
+    def clamp(self, score: float) -> float:
+        # Hackathon requirement: strictly between 0 and 1
+        return max(0.01, min(score, 0.99))
+
+
+class BasicRoutingRubric(TicketRubric):
+    def forward(self, action: Any, observation: Any) -> float:
+        metadata = getattr(observation, "metadata", {})
+        ticket = metadata.get("current_ticket")
+        department = metadata.get("submitted_department", "")
+
+        if not ticket or not department:
+            return 0.01
+
+        expected = ticket["expected_department"]
+        score = 1.0 if department.strip().lower() == expected.lower() else 0.0
+        return self.clamp(score)
+
+
+class ExtractionRoutingRubric(TicketRubric):
+    def forward(self, action: Any, observation: Any) -> float:
+        metadata = getattr(observation, "metadata", {})
+        ticket = metadata.get("current_ticket")
+        department = metadata.get("submitted_department", "")
+        error_code = metadata.get("submitted_error_code", "")
+
+        if not ticket or not department:
+            return 0.01
+
+        score = 0.0
+        if department.strip().lower() == ticket["expected_department"].lower():
+            score += 0.5
+        if error_code.strip().upper() == ticket.get("expected_error_code", "").upper():
+            score += 0.5
+
+        return self.clamp(score)
+
+
+class PIIRedactionRubric(TicketRubric):
+    def forward(self, action: Any, observation: Any) -> float:
+        metadata = getattr(observation, "metadata", {})
+        ticket = metadata.get("current_ticket")
+        department = metadata.get("submitted_department", "")
+        redacted_body = metadata.get("submitted_redacted_body", "")
+
+        if not ticket or not department:
+            return 0.01
+
+        score = 0.0
+        if department.strip().lower() == ticket["expected_department"].lower():
+            score += 0.25
+
+        if not redacted_body.strip():
+            return self.clamp(score)
+
+        if "[REDACTED]" in redacted_body:
+            score += 0.25
+
+        pii_found = 0
+        patterns = ticket.get("pii_patterns", [])
+        for pat in patterns:
+            if re.search(re.escape(pat), redacted_body):
+                pii_found += 1
+
+        if patterns:
+            fraction_removed = 1.0 - (pii_found / len(patterns))
+            score += 0.5 * fraction_removed
+
+        return self.clamp(min(score, 1.0))
+
+
 class TicketRouterEnvironment(MCPEnvironment):
     """
     L1 Customer Support Ticket Router environment.
@@ -219,6 +298,14 @@ class TicketRouterEnvironment(MCPEnvironment):
 
         super().__init__(mcp)
 
+        self.tasks = RubricDict(
+            {
+                "basic_routing": BasicRoutingRubric(),
+                "extraction_routing": ExtractionRoutingRubric(),
+                "pii_redaction": PIIRedactionRubric(),
+            }
+        )
+
         self._task = os.environ.get("TICKET_ROUTER_TASK", "basic_routing")
         self._state = State(episode_id=str(uuid4()), step_count=0)
         self._current_ticket = None
@@ -232,24 +319,26 @@ class TicketRouterEnvironment(MCPEnvironment):
         self, department: str, error_code: str, redacted_body: str
     ) -> str:
         """Grade the agent's submission and store the reward."""
-        ticket = self._current_ticket
-        if ticket is None:
-            self._last_reward = 0.0
+        if self._current_ticket is None:
+            self._last_reward = 0.01
             self._done = True
-            return "No active ticket. Call reset() first. reward=0.00"
+            return "No active ticket. Call reset() first. reward=0.01"
 
-        task = self._task
-        reward = 0.0
+        # Formulate a temporary observation for the rubric
+        # We use metadata to pass internal state to the rubric
+        temp_obs = TicketObservation(
+            done=True,
+            metadata={
+                "current_ticket": self._current_ticket,
+                "submitted_department": department,
+                "submitted_error_code": error_code,
+                "submitted_redacted_body": redacted_body,
+            },
+        )
 
-        if task == "basic_routing":
-            reward = self._grade_easy(department, ticket)
-        elif task == "extraction_routing":
-            reward = self._grade_medium(department, error_code, ticket)
-        elif task == "pii_redaction":
-            reward = self._grade_hard(department, redacted_body, ticket)
+        rubric = self.tasks.get(self._task, self.tasks["basic_routing"])
+        reward = rubric(None, temp_obs)
 
-        # Hackathon rule: "Each task's score must be strictly between 0 and 1"
-        reward = max(0.01, min(reward, 0.99))
         self._last_reward = round(reward, 2)
         self._done = True
         return f"Graded. reward={self._last_reward:.2f}"
