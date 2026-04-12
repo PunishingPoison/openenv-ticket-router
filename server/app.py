@@ -1,25 +1,16 @@
-"""
-FastAPI application for the Ticket Router Environment.
-
-Usage:
-    uvicorn server.app:app --host 0.0.0.0 --port 7860
-"""
-
 import os
 
 try:
     from openenv.core.env_server.http_server import create_app
-    from openenv.core.env_server.mcp_types import CallToolAction, CallToolObservation
-    from .ticket_router_environment import TicketRouterEnvironment
+    from .ticket_router_environment import TicketRouterEnvironment, TicketAction, TicketObservation
 except ImportError:
     from openenv.core.env_server.http_server import create_app
-    from openenv.core.env_server.mcp_types import CallToolAction, CallToolObservation
-    from server.ticket_router_environment import TicketRouterEnvironment
+    from server.ticket_router_environment import TicketRouterEnvironment, TicketAction, TicketObservation
 
 app = create_app(
     TicketRouterEnvironment,
-    CallToolAction,
-    CallToolObservation,
+    TicketAction,
+    TicketObservation,
     env_name="ticket_router",
 )
 
@@ -30,7 +21,6 @@ async def root():
 
 
 def main():
-    """Entry point for direct execution."""
     import uvicorn
 
     port = int(os.environ.get("PORT", "7860"))

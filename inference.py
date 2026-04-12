@@ -1,217 +1,96 @@
-"""
-Inference Script for Ticket Router Environment.
-
-MANDATORY env vars:
-    API_BASE_URL   LLM endpoint        (default: HF router)
-    MODEL_NAME     Model identifier     (default: Qwen2.5-72B-Instruct)
-    HF_TOKEN       HuggingFace / API key
-
-STDOUT format:
-    [START] task=<task> env=<bench> model=<model>
-    [STEP]  step=<n> action=<act> reward=<0.00> done=<bool> error=<msg|null>
-    [END]   success=<bool> steps=<n> score=<0.00> rewards=<r1,r2,...>
-"""
-
 import asyncio
 import json
 import os
 import re
-import textwrap
 from typing import List, Optional
-
 from openai import OpenAI
-
 from client import TicketRouterEnv
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
 API_BASE_URL = os.getenv("API_BASE_URL", "https://router.huggingface.co/v1")
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-72B-Instruct")
 HF_TOKEN = os.getenv("HF_TOKEN")
 LOCAL_IMAGE_NAME = os.getenv("LOCAL_IMAGE_NAME")
-TASK_NAME = os.getenv("TASK_NAME", "easy")
 BENCHMARK = "ticket_router"
-MAX_STEPS = 5
-TEMPERATURE = 0.2
-MAX_TOKENS = 1024
 
-
-# ---------------------------------------------------------------------------
-# Logging helpers
-# ---------------------------------------------------------------------------
 def log_start(task: str, env: str, model: str) -> None:
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
-
-def log_step(step: int, action: str, reward: float, done: bool,
-             error: Optional[str]) -> None:
+def log_step(step: int, action: str, reward: float, done: bool, error: Optional[str]) -> None:
     err = error if error else "null"
-    print(
-        f"[STEP] step={step} action={action} reward={reward:.2f} "
-        f"done={str(done).lower()} error={err}",
-        flush=True,
-    )
+    print(f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={err}", flush=True)
 
-
-def log_end(success: bool, steps: int, score: float,
-            rewards: List[float]) -> None:
+def log_end(success: bool, steps: int, score: float, rewards: List[float]) -> None:
     rstr = ",".join(f"{r:.2f}" for r in rewards)
-    print(
-        f"[END] success={str(success).lower()} steps={steps} "
-        f"score={score:.2f} rewards={rstr}",
-        flush=True,
-    )
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rstr}", flush=True)
 
-
-# ---------------------------------------------------------------------------
-# Prompt construction
-# ---------------------------------------------------------------------------
-SYSTEM_PROMPT = textwrap.dedent("""\
-You are an L1 customer support triage system. You will receive a support
-email and a task type. You must respond with ONLY a valid JSON object
-(no markdown, no explanation) matching the task:
-
-For task "triage_easy":
-  {"department": "<Sales|Billing|Tech Support>"}
-
-For task "triage_medium":
-  {"department": "Tech Support", "error_code": "<e.g. ERR-404>"}
-
-For task "triage_hard":
-  {"department": "Billing", "redacted_body": "<full email body with all
-  PII such as credit card numbers, SSNs, phone numbers, dates of birth
-  replaced by [REDACTED]>"}
-
-Rules:
-- department must be exactly one of: Sales, Billing, Tech Support
-- error_code must match the pattern ERR-<digits> found in the email
-- redacted_body must be the COMPLETE original email body with every
-  piece of PII replaced by the literal string [REDACTED]
-- Output ONLY the JSON object. No extra text.
-""")
-
-
-def build_user_prompt(task: str, subject: str, body: str) -> str:
-    return (
-        f"Task: {task}\n\n"
-        f"Subject: {subject}\n\n"
-        f"Email body:\n{body}\n\n"
-        "Respond with the JSON object now."
-    )
-
-
-# ---------------------------------------------------------------------------
-# LLM call
-# ---------------------------------------------------------------------------
-def call_llm(client: OpenAI, task: str, subject: str, body: str) -> dict:
-    """Ask the LLM to triage the email. Returns parsed JSON dict."""
-    user_msg = build_user_prompt(task, subject, body)
+def call_llm(client: OpenAI, obs_dict: dict) -> dict:
+    sys_msg = "You are an AI support bot. Output valid JSON only: {\"act_type\": \"search\", \"query\": \"<text>\"} OR {\"act_type\": \"route\", \"dept\": \"<dept>\"}"
+    user_msg = json.dumps(obs_dict)
     try:
         resp = client.chat.completions.create(
             model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
-            stream=False,
+            messages=[{"role": "system", "content": sys_msg}, {"role": "user", "content": user_msg}],
+            temperature=0.0
         )
-        text = (resp.choices[0].message.content or "").strip()
-        # Strip markdown fences if the model wraps its output
-        text = re.sub(r"^```(?:json)?\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-        return json.loads(text)
-    except Exception as exc:
-        return {"department": "Tech Support"}
+        txt = (resp.choices[0].message.content or "").strip()
+        txt = re.sub(r"^```(?:json)?\s*", "", txt)
+        txt = re.sub(r"\s*```$", "", txt)
+        return json.loads(txt)
+    except Exception:
+        return {"act_type": "route", "dept": "Tech Support"}
 
-
-# ---------------------------------------------------------------------------
-# Main loop
-# ---------------------------------------------------------------------------
-async def run_episode(client: OpenAI, env: TicketRouterEnv, difficulty: str) -> float:
-    """Run a single episode for a given difficulty."""
-    task_id = f"triage_{difficulty}_001"
+async def run_ep(client: OpenAI, env: TicketRouterEnv, diff: str) -> float:
+    task_id = f"triage_{diff}_001"
     log_start(task=task_id, env=BENCHMARK, model=MODEL_NAME)
-    
     rewards: List[float] = []
-    steps_taken = 0
+    step_count = 0
     score = 0.0
-    success = False
-
+    
     try:
-        # User-prescribed protocol: pass 'difficulty' to reset()
-        result = await env.reset(difficulty=difficulty)
-
-        # Extract observation data
-        if hasattr(result, "metadata"):
-            obs = result.metadata
-        elif isinstance(result, dict):
-            obs = result.get("metadata", result)
+        obs = await env.reset(difficulty=diff)
+        if hasattr(obs, "model_dump"):
+            obs_dict = obs.model_dump()
         else:
-            obs = {}
-
-        task_label = obs.get("task", difficulty)
-        subject = obs.get("email_subject", "")
-        body = obs.get("email_body", "")
-
-        # Ask the LLM to triage
-        answer = call_llm(client, task_label, subject, body)
-
-        # Build tool arguments
-        dept = answer.get("department", "")
-        error_code = answer.get("error_code", "")
-        redacted = answer.get("redacted_body", "")
-
-        action_str = json.dumps(answer, ensure_ascii=False)
-
-        # Submit via MCP tool call
-        tool_result = await env.call_tool(
-            "submit_answer",
-            department=dept,
-            error_code=error_code,
-            redacted_body=redacted,
-        )
-
-        # Parse reward from tool result string
-        reward = 0.0
-        if isinstance(tool_result, str) and "reward=" in tool_result:
-            try:
-                reward = float(tool_result.split("reward=")[1])
-            except (ValueError, IndexError):
-                pass
-
-        steps_taken = 1
-        rewards.append(reward)
-        done = True
-        error = None
-
-        log_step(step=1, action=action_str, reward=reward,
-                 done=done, error=error)
-
-        score = reward
-        success = score >= 0.5
-
-    except Exception as exc:
-        log_step(step=steps_taken + 1, action="error", reward=0.0,
-                 done=True, error=str(exc))
+            obs_dict = obs
+            
+        done = False
+        while not done and step_count < 5:
+            step_count += 1
+            act_dict = call_llm(client, obs_dict)
+            act_str = json.dumps(act_dict)
+            
+            res = await env.step(action=act_dict)
+            
+            if hasattr(res, "model_dump"):
+                obs_dict = res.model_dump()
+            elif hasattr(res, "metadata"):
+                obs_dict = res.metadata
+            else:
+                obs_dict = res
+                
+            reward = float(obs_dict.get("reward", 0.0))
+            done = bool(obs_dict.get("done", True))
+            err = obs_dict.get("error", None)
+            
+            rewards.append(reward)
+            log_step(step=step_count, action=act_str, reward=reward, done=done, error=err)
+            
+            if done:
+                score = reward
+                
+    except Exception as e:
+        log_step(step=step_count+1, action="error", reward=0.0, done=True, error=str(e))
         rewards.append(0.0)
-        steps_taken += 1
-
-    finally:
-        # Enforce hackathon rule strictly
-        score = max(0.01, min(score, 0.99))
-        rewards = [max(0.01, min(r, 0.99)) for r in rewards]
-
-        log_end(success=success, steps=steps_taken, score=score,
-                rewards=rewards)
-        return score
-
+        step_count += 1
+    
+    score = max(0.01, min(score, 0.99))
+    rewards = [max(0.01, min(r, 0.99)) for r in rewards]
+    success = score >= 0.5
+    log_end(success=success, steps=step_count, score=score, rewards=rewards)
+    return score
 
 async def main() -> None:
     client = OpenAI(base_url=API_BASE_URL, api_key=HF_TOKEN)
-
     if LOCAL_IMAGE_NAME:
         env = await TicketRouterEnv.from_docker_image(LOCAL_IMAGE_NAME)
     else:
@@ -220,15 +99,13 @@ async def main() -> None:
         await env.__aenter__()
 
     try:
-        difficulties = ["easy", "medium", "hard"]
-        for diff in difficulties:
-            await run_episode(client, env, diff)
+        for d in ["easy", "medium", "hard"]:
+            await run_ep(client, env, d)
     finally:
         try:
             await env.close()
         except Exception:
             pass
-
 
 if __name__ == "__main__":
     asyncio.run(main())
