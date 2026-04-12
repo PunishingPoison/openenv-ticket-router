@@ -1,4 +1,4 @@
-from openenv.core.env_client import EnvClient
+from openenv.core.generic_client import GenericEnvClient
 
-class TicketRouterEnv(EnvClient):
+class TicketRouterEnv(GenericEnvClient):
     pass

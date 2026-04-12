@@ -47,12 +47,9 @@ async def run_ep(client: OpenAI, env: TicketRouterEnv, diff: str) -> float:
     score = 0.0
     
     try:
-        obs = await env.reset(difficulty=diff)
-        if hasattr(obs, "model_dump"):
-            obs_dict = obs.model_dump()
-        else:
-            obs_dict = obs
-            
+        res = await env.reset(difficulty=diff)
+        obs_dict = res.observation
+        
         done = False
         while not done and step_count < 5:
             step_count += 1
@@ -60,16 +57,9 @@ async def run_ep(client: OpenAI, env: TicketRouterEnv, diff: str) -> float:
             act_str = json.dumps(act_dict)
             
             res = await env.step(action=act_dict)
-            
-            if hasattr(res, "model_dump"):
-                obs_dict = res.model_dump()
-            elif hasattr(res, "metadata"):
-                obs_dict = res.metadata
-            else:
-                obs_dict = res
-                
-            reward = float(obs_dict.get("reward", 0.0))
-            done = bool(obs_dict.get("done", True))
+            obs_dict = res.observation
+            reward = float(res.reward if res.reward is not None else 0.0)
+            done = bool(res.done)
             err = obs_dict.get("error", None)
             
             rewards.append(reward)
